@@ -187,7 +187,7 @@ async fn main() {
 
     let progress = indicatif::ProgressBar::new(total.len() as u64);
     progress.set_style(
-        ProgressStyle::with_template("[{elapsed_precise}] {bar:100.cyan/blue} {pos:>7}/{len:7} {msg}").unwrap()
+        ProgressStyle::with_template("{spinner}{bar:100.cyan/blue} {percent:>3}% | [{eta_precise}][{elapsed_precise}] ETA/Elapsed | {pos:>7}/{len:7} {msg}").unwrap()
     );
 
     println!("Processing: {} transactions", total.len());
