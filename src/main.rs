@@ -14,7 +14,7 @@ struct RRTransactionDict {
     transactions: Vec<RRTransactionHash>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 struct RRTransaction {
     from: String,
@@ -96,7 +96,12 @@ impl RoninRest {
     pub async fn transaction(&self, hash: &RRTransactionHash) -> RRTransaction {
         let data: RRTransaction = serde_json::from_str(
             &self.client.get(format!("{}/ronin/getTransaction/{}", self.host, hash)).send().await.unwrap().text().await.unwrap()
-        ).unwrap();
+        ).unwrap_or(RRTransaction {
+            from: "null".to_string(),
+            to: "null".to_string(),
+            hash: "null".to_string(),
+            block_number: 0
+        });
 
         data
     }
@@ -192,6 +197,10 @@ async fn main() {
     for hash in total {
         let tx = rr.transaction(&hash).await;
 
+        if tx.to == "null" && tx.from == "null" {
+            println!("Failed to retrieve transaction details: {}", &hash)
+        }
+
         if tx.to != tx.from {
             account_data.push(
                 RRDecodedTransaction {
@@ -204,6 +213,7 @@ async fn main() {
                 }
             );
         }
+
         progress.inc(1);
         progress.set_message(hash);
     }
