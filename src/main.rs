@@ -1,3 +1,4 @@
+use std::time::Duration;
 use dialoguer::Input;
 use indicatif::ProgressStyle;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
@@ -50,7 +51,12 @@ impl RoninRest {
             host: "https://ronin.rest".into(),
             client: ClientBuilder::new(reqwest::Client::new()).with(
                 RetryTransientMiddleware::new_with_policy(
-                    ExponentialBackoff::builder().build_with_max_retries(15)
+                    ExponentialBackoff {
+                        max_n_retries: 25,
+                        min_retry_interval: Duration::from_secs(1),
+                        max_retry_interval: Duration::from_secs(15),
+                        backoff_exponent: 2
+                    }
                 )
             ).build(),
         }
