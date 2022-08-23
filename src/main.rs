@@ -7,6 +7,8 @@ use reqwest_retry::RetryTransientMiddleware;
 use serde::{Deserialize, Serialize};
 use web3::types::Address;
 
+const DEFAULT_USER_AGENT: &str = "ronin/wally0.1.0 See: https://github.com/wehmoen/ronin-wally";
+
 type RRTransactionHash = String;
 
 #[derive(Serialize, Deserialize)]
@@ -64,14 +66,14 @@ impl RoninRest {
 
     pub async fn sent_transactions(&self) -> RRTransactionDict {
         let data: RRTransactionDict = serde_json::from_str(
-            &self.client.get(format!("{}/archive/listSentTransactions/{}", self.host, self.address)).send().await.unwrap().text().await.unwrap()
+            &self.client.get(format!("{}/archive/listSentTransactions/{}", self.host, self.address)).header("user-agent", DEFAULT_USER_AGENT).send().await.unwrap().text().await.unwrap()
         ).unwrap();
 
         data
     }
     pub async fn received_transactions(&self) -> RRTransactionDict {
         let data: RRTransactionDict = serde_json::from_str(
-            &self.client.get(format!("{}/archive/listReceivedTransactions/{}", self.host, self.address)).send().await.unwrap().text().await.unwrap()
+            &self.client.get(format!("{}/archive/listReceivedTransactions/{}", self.host, self.address)).header("user-agent", DEFAULT_USER_AGENT).send().await.unwrap().text().await.unwrap()
         ).unwrap();
 
         data
@@ -79,7 +81,7 @@ impl RoninRest {
 
     pub async fn decode_method(&self, hash: &RRTransactionHash) -> serde_json::Value {
         let data: serde_json::Value = serde_json::from_str(
-            &self.client.get(format!("{}/ronin/decodeTransaction/{}", self.host, hash)).send().await.unwrap().text().await.unwrap()
+            &self.client.get(format!("{}/ronin/decodeTransaction/{}", self.host, hash)).header("user-agent", DEFAULT_USER_AGENT).send().await.unwrap().text().await.unwrap()
         ).unwrap();
 
         data
@@ -87,7 +89,7 @@ impl RoninRest {
 
     pub async fn decode_receipt(&self, hash: &RRTransactionHash) -> serde_json::Value {
         let data: serde_json::Value = serde_json::from_str(
-            &self.client.get(format!("{}/ronin/decodeTransactionReceipt/{}", self.host, hash)).send().await.unwrap().text().await.unwrap()
+            &self.client.get(format!("{}/ronin/decodeTransactionReceipt/{}", self.host, hash)).header("user-agent", DEFAULT_USER_AGENT).send().await.unwrap().text().await.unwrap()
         ).unwrap();
 
         data
@@ -95,7 +97,7 @@ impl RoninRest {
 
     pub async fn transaction(&self, hash: &RRTransactionHash) -> RRTransaction {
         let data: RRTransaction = serde_json::from_str(
-            &self.client.get(format!("{}/ronin/getTransaction/{}", self.host, hash)).send().await.unwrap().text().await.unwrap()
+            &self.client.get(format!("{}/ronin/getTransaction/{}", self.host, hash)).header("user-agent", DEFAULT_USER_AGENT).send().await.unwrap().text().await.unwrap()
         ).unwrap_or(RRTransaction {
             from: "null".to_string(),
             to: "null".to_string(),
@@ -119,7 +121,7 @@ impl ArgParser {
 
         for arg in args {
             if arg.starts_with(param) {
-                let kv: Vec<&str> = arg.split("=").collect();
+                let kv: Vec<&str> = arg.split('=').collect();
                 if kv.len() == 2 {
                     return Some(kv[1].to_string())
                 }
@@ -189,8 +191,6 @@ async fn main() {
     progress.set_style(
         ProgressStyle::with_template("{spinner}{bar:100.cyan/blue} {percent:>3}% | [{eta_precise}][{elapsed_precise}] ETA/Elapsed | {pos:>7}/{len:7} {msg}").unwrap()
     );
-
-    println!("Processing: {} transactions", total.len());
 
     let mut account_data: Vec<RRDecodedTransaction> = vec![];
 
