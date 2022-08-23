@@ -1,4 +1,5 @@
 use dialoguer::Input;
+use indicatif::ProgressStyle;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
@@ -95,39 +96,90 @@ impl RoninRest {
     }
 }
 
+struct ArgParser {}
+impl ArgParser {
+    fn parse() -> Vec<String> {
+        std::env::args().collect()
+    }
+
+    fn split(param: &String) -> Option<String> {
+
+        let args: Vec<String> = ArgParser::parse();
+
+        for arg in args {
+            if arg.starts_with(param) {
+                let kv: Vec<&str> = arg.split("=").collect();
+                if kv.len() == 2 {
+                    return Some(kv[1].to_string())
+                }
+            }
+        }
+
+        None
+    }
+}
+
 #[tokio::main]
 async fn main() {
 
-    let address: String = normalize_address(
-        &Input::new()
-            .with_prompt("Please enter your Ronin address")
-            .validate_with(|input: &String| -> Result<(), &str> {
-                let address = normalize_address(input).as_str().parse::<Address>();
-                match address {
-                    Ok(_) => Ok(()),
-                    Err(_) => Err("Failed to parse your address!")
+    let use_localhost = match ArgParser::split(&"--localhost".to_string()) {
+        None => false,
+        Some(_) => true
+    };
+
+    let address: String = match ArgParser::split(&"--address".to_string()) {
+        None => {
+            normalize_address(
+                &Input::new()
+                    .with_prompt("Please enter your Ronin address")
+                    .validate_with(|input: &String| -> Result<(), &str> {
+                        let address = normalize_address(input).as_str().parse::<Address>();
+                        match address {
+                            Ok(_) => Ok(()),
+                            Err(_) => Err("Failed to parse your address!")
+                        }
+                    })
+                    .interact()
+                    .unwrap()
+            )
+        },
+        Some(passed_address) => {
+            let address = normalize_address(&passed_address).as_str().parse::<Address>();
+            match address {
+                Ok(_) => normalize_address(&passed_address),
+                Err(_) => {
+                    panic!("Could not parse address!");
                 }
-            })
-            .interact()
-            .unwrap()
-    );
+            }
+        }
+    };
 
 
-    let rr = RoninRest::new(address);
+    let mut rr = RoninRest::new(address);
+
+    if use_localhost {
+        println!(">> !! USING LOCALHOST FOR API CALLS !! <<");
+        rr.host = "http://localhost:3000".to_string();
+    }
 
     let mut sent: RRTransactionDict = rr.sent_transactions().await;
     let mut received: RRTransactionDict = rr.received_transactions().await;
 
     let mut total: Vec<RRTransactionHash> = vec![];
 
-    println!("Sent Transactions: {}\nReceived Transactions: {}", sent.transactions.len(), received.transactions.len());
+    println!("Sent Transactions: {}\nReceived Transactions: {}\nAddress: {}", sent.transactions.len(), received.transactions.len(), rr.address);
 
     total.append(&mut sent.transactions);
     total.append(&mut received.transactions);
 
     total.dedup();
 
-    println!("Processing: {} valid transactions", total.len());
+    let progress = indicatif::ProgressBar::new(total.len() as u64);
+    progress.set_style(
+        ProgressStyle::with_template("[{elapsed_precise}] {bar:100.cyan/blue} {pos:>7}/{len:7} {msg}").unwrap()
+    );
+
+    println!("Processing: {} transactions", total.len());
 
     let mut account_data: Vec<RRDecodedTransaction> = vec![];
 
@@ -146,12 +198,23 @@ async fn main() {
                 }
             );
         }
-        println!("Completed: {}", &hash);
+        progress.inc(1);
+        progress.set_message(hash);
     }
+
+    progress.set_message("Saving...");
 
     account_data.sort_by(|a, b| {
         a.block_number.cmp(&b.block_number)
     });
 
-    std::fs::write(format!("{}.json", rr.address), serde_json::to_string(&account_data).unwrap()).unwrap();
+    let output_file_name = format!("{}.json", rr.address);
+
+    std::fs::write(&output_file_name, serde_json::to_string(&account_data).unwrap()).unwrap();
+
+    progress.set_message("FINISH!");
+
+    progress.finish();
+
+    println!("The output was saved to {}", &output_file_name);
 }
